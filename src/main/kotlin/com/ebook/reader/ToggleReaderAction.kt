@@ -7,7 +7,7 @@ import com.intellij.openapi.wm.ToolWindowManager
 class ToggleReaderAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Output")
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("BookWorm")
         toolWindow?.let {
             if (it.isVisible) {
                 it.hide()

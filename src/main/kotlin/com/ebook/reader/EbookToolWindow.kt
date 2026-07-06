@@ -29,15 +29,18 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
 
     private fun setupUI() {
         mainPanel.background = UIManager.getColor("Panel.background")
+        mainPanel.minimumSize = Dimension(100, 0)
+        mainPanel.preferredSize = Dimension(200, 0)
 
-        // Content area - looks like terminal
+        // Content area - follow IDE theme
         contentArea.isEditable = false
         contentArea.lineWrap = true
         contentArea.wrapStyleWord = true
         contentArea.font = Font("Monospaced", Font.PLAIN, 12)
-        contentArea.background = Color(43, 43, 43)
-        contentArea.foreground = Color(187, 187, 187)
+        contentArea.background = UIManager.getColor("TextArea.background")
+        contentArea.foreground = UIManager.getColor("TextArea.foreground")
         contentArea.border = EmptyBorder(5, 10, 5, 10)
+        contentArea.caretColor = UIManager.getColor("TextArea.foreground")
 
         val scrollPane = JBScrollPane(contentArea)
         scrollPane.border = JBUI.Borders.empty()

@@ -1,17 +1,17 @@
 <idea-plugin>
     <id>com.ebook.reader</id>
-    <name>Output Viewer</name>
-    <vendor email="support@example.com">Internal Tools</vendor>
+    <name>BookWorm</name>
+    <vendor email="support@example.com">shenyu</vendor>
 
     <description><![CDATA[
-        A simple output viewer plugin for development tools.
+        A lightweight ebook reader embedded in your IDE. Read books without leaving your workspace.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
-            id="Output"
+            id="BookWorm"
             anchor="bottom"
             factoryClass="com.ebook.reader.EbookToolWindowFactory"
             icon="/icons/toolWindow.svg"
@@ -22,9 +22,8 @@
         <action
             id="com.ebook.reader.ToggleAction"
             class="com.ebook.reader.ToggleReaderAction"
-            text="Toggle Output Viewer"
-            description="Toggle output viewer visibility">
-            <keyboard-shortcut keymap="$default" first-keystroke="meta P"/>
+            text="Toggle BookWorm"
+            description="Toggle BookWorm reader visibility">
             <add-to-group group-id="ViewMenu" anchor="last"/>
         </action>
     </actions>
