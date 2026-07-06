@@ -4,7 +4,33 @@
     <vendor email="support@example.com">shenyu</vendor>
 
     <description><![CDATA[
-        A lightweight ebook reader embedded in your IDE. Read books without leaving your workspace.
+        <h2>📖 BookWorm — IDE 内置电子书阅读器</h2>
+        <p>一个轻量级的电子书阅读器，嵌入在 IntelliJ IDEA 底部工具窗口中，让你在编码间隙随时阅读，无需切换应用。</p>
+
+        <h3>✨ 功能特性</h3>
+        <ul>
+            <li><b>多格式支持</b> — 支持 TXT、EPUB、MOBI 三种常见电子书格式</li>
+            <li><b>连续滚动阅读</b> — 章节之间无缝衔接，自动加载上下章，体验如同主流阅读 App</li>
+            <li><b>阅读进度记忆</b> — 自动保存上次阅读位置（章节 + 段落偏移），重新打开自动恢复</li>
+            <li><b>章节导航</b> — 侧栏章节列表，一键跳转到任意章节</li>
+            <li><b>字体调节</b> — 支持 A-/A+ 调整字体大小，适配不同阅读习惯</li>
+            <li><b>主题适配</b> — 自动跟随 IDE 深色/浅色主题</li>
+        </ul>
+
+        <h3>⌨️ 快捷键</h3>
+        <table>
+            <tr><td><b>↑ / ↓</b></td><td>上下翻页</td></tr>
+            <tr><td><b>← / →</b></td><td>上一章 / 下一章</td></tr>
+        </table>
+
+        <h3>🚀 使用方法</h3>
+        <ol>
+            <li>打开底部工具栏的 <b>BookWorm</b> 窗口</li>
+            <li>点击 📂 按钮选择电子书文件</li>
+            <li>使用键盘方向键或工具栏按钮进行阅读</li>
+        </ol>
+
+        <p><i>适合在编码间隙、等待编译时随手翻阅技术书籍或小说。</i></p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
