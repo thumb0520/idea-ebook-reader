@@ -3,12 +3,13 @@ package com.ebook.reader.parsers
 import com.ebook.reader.BookContent
 import com.ebook.reader.Chapter
 import com.ebook.reader.EbookParser
+import io.documentnode.epub4j.epub.EpubReader
 import org.jsoup.Jsoup
 import java.io.File
 
 class EpubParser : EbookParser {
     override fun parse(file: File): BookContent {
-        val epubReader = nl.siegmann.epublib.epub.EpubReader()
+        val epubReader = EpubReader()
         val book = epubReader.readEpub(file.inputStream())
 
         val title = book.title ?: file.nameWithoutExtension

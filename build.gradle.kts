@@ -8,14 +8,14 @@ group = "com.ebook.reader"
 version = "1.0.0"
 
 repositories {
+    mavenLocal()
+    maven { url = uri("https://maven.aliyun.com/repository/public") }
+    maven { url = uri("https://mirrors.cloud.tencent.com/nexus/repository/maven-public/") }
     mavenCentral()
 }
 
 dependencies {
-    implementation("io.documentnode:epublib:4.0") {
-        exclude(group = "org.slf4j", module = "slf4j-api")
-        exclude(group = "xmlpull", module = "xmlpull")
-    }
+    implementation("io.documentnode:epub4j-core:4.2.3")
     implementation("org.jsoup:jsoup:1.16.1")
 }
 
@@ -35,7 +35,7 @@ tasks {
     }
     patchPluginXml {
         sinceBuild.set("232")
-        untilBuild.set("242.*")
+        untilBuild.set("253.*")
     }
     buildSearchableOptions {
         enabled = false

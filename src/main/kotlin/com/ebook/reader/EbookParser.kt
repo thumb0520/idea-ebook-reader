@@ -1,5 +1,8 @@
 package com.ebook.reader
 
+import com.ebook.reader.parsers.EpubParser
+import com.ebook.reader.parsers.MobiParser
+import com.ebook.reader.parsers.TxtParser
 import java.io.File
 
 data class BookContent(

@@ -112,7 +112,7 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
     private fun createSmallButton(text: String): JButton {
         val button = JButton(text)
         button.font = Font("Dialog", Font.PLAIN, 11)
-        button.margin = JBUIInsets(2, 4, 2, 4)
+        button.margin = Insets(2, 4, 2, 4)
         button.isFocusPainted = false
         return button
     }
