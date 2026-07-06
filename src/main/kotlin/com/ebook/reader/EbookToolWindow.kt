@@ -101,14 +101,40 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         mainPanel.add(splitPane, BorderLayout.CENTER)
 
         // Keyboard navigation
-        contentArea.getInputMap().put(KeyStroke.getKeyStroke("PAGE_UP"), "prevChapter")
-        contentArea.actionMap.put("prevChapter", object : AbstractAction() {
+        val im = contentArea.getInputMap(JComponent.WHEN_FOCUSED)
+        val am = contentArea.actionMap
+
+        // 上下键翻页
+        im.put(KeyStroke.getKeyStroke("UP"), "scrollUp")
+        am.put("scrollUp", object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent) {
+                scrollPageUp()
+            }
+        })
+        im.put(KeyStroke.getKeyStroke("DOWN"), "scrollDown")
+        am.put("scrollDown", object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent) {
+                scrollPageDown()
+            }
+        })
+
+        // 左右键切换章节
+        im.put(KeyStroke.getKeyStroke("LEFT"), "prevChapter")
+        am.put("prevChapter", object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent) = prevChapter()
         })
-        contentArea.getInputMap().put(KeyStroke.getKeyStroke("PAGE_DOWN"), "nextChapter")
-        contentArea.actionMap.put("nextChapter", object : AbstractAction() {
+        im.put(KeyStroke.getKeyStroke("RIGHT"), "nextChapter")
+        am.put("nextChapter", object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent) = nextChapter()
         })
+
+        // 滚动到底部自动跳转下一章
+        contentArea.addCaretListener {
+            val doc = contentArea.document
+            if (doc.length > 0 && contentArea.caretPosition >= doc.length - 1) {
+                autoNextChapter()
+            }
+        }
 
         loadLastBook()
     }
@@ -183,17 +209,23 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
     }
 
     private fun prevChapter() {
+        if (isChangingChapter) return
         if (currentChapter > 0) {
+            isChangingChapter = true
             saveReadingPosition()
             showChapter(currentChapter - 1)
+            javax.swing.Timer(500) { isChangingChapter = false }.start()
         }
     }
 
     private fun nextChapter() {
+        if (isChangingChapter) return
         val book = bookContent ?: return
         if (currentChapter < book.chapters.size - 1) {
+            isChangingChapter = true
             saveReadingPosition()
             showChapter(currentChapter + 1)
+            javax.swing.Timer(500) { isChangingChapter = false }.start()
         }
     }
 
@@ -208,6 +240,40 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         val current = contentArea.font
         val newSize = (current.size + delta).coerceIn(8, 24)
         contentArea.font = current.deriveFont(newSize.toFloat())
+    }
+
+    private fun scrollPageUp() {
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val rect = viewport.viewRect
+        val lineHeight = contentArea.getFontMetrics(contentArea.font).height
+        val linesPerPage = (rect.height / lineHeight).coerceAtLeast(1)
+        val newPos = (contentArea.caretPosition - linesPerPage * 3).coerceAtLeast(0)
+        contentArea.caretPosition = newPos
+        contentArea.scrollRectToVisible(java.awt.Rectangle(0, newPos, 1, 1))
+    }
+
+    private fun scrollPageDown() {
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val rect = viewport.viewRect
+        val lineHeight = contentArea.getFontMetrics(contentArea.font).height
+        val linesPerPage = (rect.height / lineHeight).coerceAtLeast(1)
+        val newPos = (contentArea.caretPosition + linesPerPage * 3).coerceAtMost(contentArea.document.length)
+        contentArea.caretPosition = newPos
+        contentArea.scrollRectToVisible(java.awt.Rectangle(0, newPos, 1, 1))
+    }
+
+    private var isChangingChapter = false
+
+    private fun autoNextChapter() {
+        if (isChangingChapter) return
+        val book = bookContent ?: return
+        if (currentChapter < book.chapters.size - 1) {
+            isChangingChapter = true
+            saveReadingPosition()
+            showChapter(currentChapter + 1)
+            // 延迟重新启用自动跳转，避免连续触发
+            javax.swing.Timer(500) { isChangingChapter = false }.start()
+        }
     }
 
     private fun saveLastBookPath(path: String) {
