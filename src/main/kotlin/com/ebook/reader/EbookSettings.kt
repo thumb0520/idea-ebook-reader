@@ -15,6 +15,7 @@ class EbookSettings : PersistentStateComponent<EbookSettings.State> {
     data class State(
         var lastBookPath: String? = null,
         var lastChapter: Int = 0,
+        var lastScrollPosition: Int = 0,
         var fontSize: Int = 12
     )
 

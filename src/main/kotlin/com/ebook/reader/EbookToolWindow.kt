@@ -51,7 +51,8 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         chapterList.addListSelectionListener {
             if (!it.valueIsAdjusting) {
                 val index = chapterList.selectedIndex
-                if (index >= 0) {
+                if (index >= 0 && index != currentChapter) {
+                    saveReadingPosition()
                     showChapter(index)
                 }
             }
@@ -153,13 +154,20 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         bookContent?.chapters?.forEach { chapterModel.addElement(it.title) }
     }
 
-    private fun showChapter(index: Int) {
+    private fun showChapter(index: Int, scrollPosition: Int = 0) {
         val book = bookContent ?: return
         if (index !in book.chapters.indices) return
 
         currentChapter = index
         contentArea.text = book.chapters[index].content
-        contentArea.caretPosition = 0
+        contentArea.caretPosition = scrollPosition
+        if (scrollPosition > 0) {
+            try {
+                contentArea.scrollRectToVisible(contentArea.modelToView(scrollPosition))
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
         chapterList.selectedIndex = index
 
         // Update label
@@ -168,13 +176,25 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         label?.text = "${index + 1}/${book.chapters.size}"
     }
 
+    private fun saveReadingPosition() {
+        val properties = project.getService(EbookSettings::class.java).state
+        properties.lastChapter = currentChapter
+        properties.lastScrollPosition = contentArea.caretPosition
+    }
+
     private fun prevChapter() {
-        if (currentChapter > 0) showChapter(currentChapter - 1)
+        if (currentChapter > 0) {
+            saveReadingPosition()
+            showChapter(currentChapter - 1)
+        }
     }
 
     private fun nextChapter() {
         val book = bookContent ?: return
-        if (currentChapter < book.chapters.size - 1) showChapter(currentChapter + 1)
+        if (currentChapter < book.chapters.size - 1) {
+            saveReadingPosition()
+            showChapter(currentChapter + 1)
+        }
     }
 
     private fun toggleChapterList() {
@@ -194,6 +214,7 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         val properties = project.getService(EbookSettings::class.java).state
         properties.lastBookPath = path
         properties.lastChapter = currentChapter
+        properties.lastScrollPosition = contentArea.caretPosition
     }
 
     private fun loadLastBook() {
@@ -202,9 +223,22 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         if (path != null) {
             val file = File(path)
             if (file.exists()) {
-                loadBook(file)
-                val chapter = properties.lastChapter
-                if (chapter > 0) showChapter(chapter)
+                val parser = ParserFactory.getParser(file.name)
+                if (parser == null) {
+                    contentArea.text = "Unsupported file format"
+                    return
+                }
+
+                try {
+                    bookContent = parser.parse(file)
+                    updateChapterList()
+                    val chapter = properties.lastChapter.coerceIn(0, (bookContent?.chapters?.size ?: 1) - 1)
+                    val scrollPos = properties.lastScrollPosition.coerceIn(0, Int.MAX_VALUE)
+                    showChapter(chapter, scrollPos)
+                    saveLastBookPath(file.absolutePath)
+                } catch (e: Exception) {
+                    contentArea.text = "Error loading book: ${e.message}"
+                }
             }
         }
     }
