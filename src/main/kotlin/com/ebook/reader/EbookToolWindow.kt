@@ -20,6 +20,13 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
     private val chapterModel = DefaultListModel<String>()
     private var bookContent: BookContent? = null
     private var currentChapter = 0
+    private lateinit var scrollPane: JBScrollPane
+
+    // 连续滚动模式：记录当前显示的章节范围和各章在文档中的位置
+    private var firstVisibleChapter = 0
+    private var lastVisibleChapter = 0
+    // 各章起始位置在 contentArea document 中的 offset
+    private val chapterOffsets = mutableListOf<Int>()
 
     init {
         setupUI()
@@ -42,7 +49,7 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         contentArea.border = EmptyBorder(5, 10, 5, 10)
         contentArea.caretColor = UIManager.getColor("TextArea.foreground")
 
-        val scrollPane = JBScrollPane(contentArea)
+        scrollPane = JBScrollPane(contentArea)
         scrollPane.border = JBUI.Borders.empty()
 
         // Chapter list (hidden by default, shown on right-click)
@@ -73,10 +80,6 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         val fontSmaller = createSmallButton("A-")
         val fontLarger = createSmallButton("A+")
 
-        val chapterLabel = JLabel("No book loaded")
-        chapterLabel.foreground = UIManager.getColor("Label.foreground")
-        chapterLabel.font = Font("Dialog", Font.PLAIN, 11)
-
         prevButton.addActionListener { prevChapter() }
         nextButton.addActionListener { nextChapter() }
         chapterButton.addActionListener { toggleChapterList() }
@@ -87,7 +90,6 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         navPanel.add(openButton)
         navPanel.add(chapterButton)
         navPanel.add(prevButton)
-        navPanel.add(chapterLabel)
         navPanel.add(nextButton)
         navPanel.add(fontSmaller)
         navPanel.add(fontLarger)
@@ -101,14 +103,40 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         mainPanel.add(splitPane, BorderLayout.CENTER)
 
         // Keyboard navigation
-        contentArea.getInputMap().put(KeyStroke.getKeyStroke("PAGE_UP"), "prevChapter")
-        contentArea.actionMap.put("prevChapter", object : AbstractAction() {
+        val im = contentArea.getInputMap(JComponent.WHEN_FOCUSED)
+        val am = contentArea.actionMap
+
+        // 上下键翻页
+        im.put(KeyStroke.getKeyStroke("UP"), "scrollUp")
+        am.put("scrollUp", object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent) {
+                scrollPageUp()
+            }
+        })
+        im.put(KeyStroke.getKeyStroke("DOWN"), "scrollDown")
+        am.put("scrollDown", object : AbstractAction() {
+            override fun actionPerformed(e: ActionEvent) {
+                scrollPageDown()
+            }
+        })
+
+        // 左右键切换章节
+        im.put(KeyStroke.getKeyStroke("LEFT"), "prevChapter")
+        am.put("prevChapter", object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent) = prevChapter()
         })
-        contentArea.getInputMap().put(KeyStroke.getKeyStroke("PAGE_DOWN"), "nextChapter")
-        contentArea.actionMap.put("nextChapter", object : AbstractAction() {
+        im.put(KeyStroke.getKeyStroke("RIGHT"), "nextChapter")
+        am.put("nextChapter", object : AbstractAction() {
             override fun actionPerformed(e: ActionEvent) = nextChapter()
         })
+
+        // 滚动时检查是否需要追加/前置章节
+        val viewport = scrollPane.viewport
+        viewport.addChangeListener {
+            checkAppendNextChapter()
+            checkPrependPrevChapter()
+            updateCurrentChapterFromScroll()
+        }
 
         loadLastBook()
     }
@@ -159,27 +187,125 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         if (index !in book.chapters.indices) return
 
         currentChapter = index
-        contentArea.text = book.chapters[index].content
-        contentArea.caretPosition = scrollPosition
-        if (scrollPosition > 0) {
-            try {
-                contentArea.scrollRectToVisible(contentArea.modelToView(scrollPosition))
-            } catch (e: Exception) {
-                // ignore
+        firstVisibleChapter = index
+        lastVisibleChapter = index
+        chapterOffsets.clear()
+
+        // 加载当前章及前后各一章，实现连续滚动
+        val sb = StringBuilder()
+        val startChapter = (index - 1).coerceAtLeast(0)
+        val endChapter = (index + 1).coerceAtMost(book.chapters.size - 1)
+
+        for (i in startChapter..endChapter) {
+            chapterOffsets.add(sb.length)
+            if (i > startChapter) {
+                sb.append("\n\n")
+                sb.append("─".repeat(40))
+                sb.append("\n\n")
             }
+            sb.append(book.chapters[i].content)
+        }
+        firstVisibleChapter = startChapter
+        lastVisibleChapter = endChapter
+
+        contentArea.text = sb.toString()
+        // 滚动到目标章节的位置（scrollPosition 是章节内的相对偏移）
+        val chapterBase = chapterOffsets[index - startChapter]
+        val targetOffset = (chapterBase + scrollPosition).coerceAtMost(contentArea.document.length)
+        contentArea.caretPosition = targetOffset
+        try {
+            contentArea.scrollRectToVisible(contentArea.modelToView(targetOffset))
+        } catch (e: Exception) {
+            // ignore
         }
         chapterList.selectedIndex = index
+    }
 
-        // Update label
-        val navPanel = (mainPanel.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH) as JPanel
-        val label = navPanel.components.filterIsInstance<JLabel>().firstOrNull()
-        label?.text = "${index + 1}/${book.chapters.size}"
+    /**
+     * 根据文档中的 offset 判断当前阅读的是哪一章
+     */
+    private fun getChapterAtOffset(offset: Int): Int {
+        for (i in chapterOffsets.indices.reversed()) {
+            if (offset >= chapterOffsets[i]) {
+                return firstVisibleChapter + i
+            }
+        }
+        return firstVisibleChapter
+    }
+
+    /**
+     * 检查是否需要追加下一章内容（滚动到底部附近时）
+     */
+    private fun checkAppendNextChapter() {
+        val book = bookContent ?: return
+        if (lastVisibleChapter >= book.chapters.size - 1) return
+
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val viewRect = viewport.viewRect
+        val docLength = contentArea.document.length
+
+        // 当可见区域底部接近文档末尾时，追加下一章
+        try {
+            val bottomPos = contentArea.viewToModel(java.awt.Point(viewRect.x, viewRect.y + viewRect.height))
+            if (bottomPos > docLength - 200) {
+                val nextChapter = lastVisibleChapter + 1
+                val separator = "\n\n" + "─".repeat(40) + "\n\n"
+                chapterOffsets.add(docLength + separator.length)
+                contentArea.document.insertString(docLength, separator + book.chapters[nextChapter].content, null)
+                lastVisibleChapter = nextChapter
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    /**
+     * 检查是否需要前置上一章内容（滚动到顶部附近时）
+     */
+    private fun checkPrependPrevChapter() {
+        val book = bookContent ?: return
+        if (firstVisibleChapter <= 0) return
+
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val viewRect = viewport.viewRect
+
+        try {
+            val topPos = contentArea.viewToModel(java.awt.Point(viewRect.x, viewRect.y))
+            if (topPos < 200) {
+                val prevChapter = firstVisibleChapter - 1
+                val separator = "\n\n" + "─".repeat(40) + "\n\n"
+                val insertText = book.chapters[prevChapter].content + separator
+                val oldCaret = contentArea.caretPosition
+                contentArea.document.insertString(0, insertText, null)
+                // 调整所有 offset
+                val shift = insertText.length
+                for (i in chapterOffsets.indices) {
+                    chapterOffsets[i] += shift
+                }
+                chapterOffsets.add(0, 0)
+                firstVisibleChapter = prevChapter
+                // 保持阅读位置不动
+                contentArea.caretPosition = oldCaret + shift
+                try {
+                    contentArea.scrollRectToVisible(contentArea.modelToView(oldCaret + shift))
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     private fun saveReadingPosition() {
         val properties = project.getService(EbookSettings::class.java).state
         properties.lastChapter = currentChapter
-        properties.lastScrollPosition = contentArea.caretPosition
+        // 保存相对于当前章节的阅读位置
+        val chapterIdx = currentChapter - firstVisibleChapter
+        if (chapterIdx in chapterOffsets.indices) {
+            val relativePos = contentArea.caretPosition - chapterOffsets[chapterIdx]
+            properties.lastScrollPosition = relativePos.coerceAtLeast(0)
+        }
     }
 
     private fun prevChapter() {
@@ -208,6 +334,48 @@ class EbookToolWindow(private val project: Project, private val toolWindow: Tool
         val current = contentArea.font
         val newSize = (current.size + delta).coerceIn(8, 24)
         contentArea.font = current.deriveFont(newSize.toFloat())
+    }
+
+    private fun scrollPageUp() {
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val rect = viewport.viewRect
+        val lineHeight = contentArea.getFontMetrics(contentArea.font).height
+        val linesPerPage = (rect.height / lineHeight).coerceAtLeast(1)
+        val newPos = (contentArea.caretPosition - linesPerPage * 3).coerceAtLeast(0)
+        contentArea.caretPosition = newPos
+        contentArea.scrollRectToVisible(java.awt.Rectangle(0, newPos, 1, 1))
+        checkPrependPrevChapter()
+    }
+
+    private fun scrollPageDown() {
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val rect = viewport.viewRect
+        val lineHeight = contentArea.getFontMetrics(contentArea.font).height
+        val linesPerPage = (rect.height / lineHeight).coerceAtLeast(1)
+        val newPos = (contentArea.caretPosition + linesPerPage * 3).coerceAtMost(contentArea.document.length)
+        contentArea.caretPosition = newPos
+        contentArea.scrollRectToVisible(java.awt.Rectangle(0, newPos, 1, 1))
+        checkAppendNextChapter()
+    }
+
+    /**
+     * 滚动时更新当前章节索引（用于章节列表高亮）
+     */
+    private fun updateCurrentChapterFromScroll() {
+        if (chapterOffsets.isEmpty()) return
+        val viewport = (contentArea.parent as? javax.swing.JViewport) ?: return
+        val viewRect = viewport.viewRect
+        try {
+            val midPos = contentArea.viewToModel(java.awt.Point(viewRect.x, viewRect.y + viewRect.height / 2))
+            val chapter = getChapterAtOffset(midPos)
+            if (chapter != currentChapter) {
+                currentChapter = chapter
+                chapterList.selectedIndex = chapter
+                saveReadingPosition()
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     private fun saveLastBookPath(path: String) {
